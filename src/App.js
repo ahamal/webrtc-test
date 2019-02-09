@@ -22,7 +22,7 @@ class Medium {
   send(from, to, message) {
     if (!this.listeners[to])
       return;
-    this.listeners[to].forEach(fn => fn(message, from));
+    this.listeners[to].forEach(fn => fn(from, message));
   }
 }
 
@@ -33,7 +33,9 @@ class Client extends React.Component {
     this.logs = [];
     this.connections = [];
     this.medium = props.medium;
-    props.medium.subscribe(props.id, this.onMessage);
+
+    this.messageReceiveListeners = new Set();
+    props.medium.subscribe(props.id, this.receive);
   }
 
   render() {
@@ -63,11 +65,33 @@ class Client extends React.Component {
 
   connectTo = (c) => {
     this.log('Connecting');
-    this.medium.send(this.props.id, c, 'I want to connect');
+    this.createNewConnectionTo(c)
   }
 
-  onMessage = (message, from) => {
+  receive = (from, message) => {
+    this.messageReceiveListeners.forEach(l => l(from, message));
     this.log(`From [${from}]: ${message}`);
+  }
+
+  onMessageReceive = (fn) => {
+    this.messageReceiveListeners.add(fn);
+  }
+
+  createNewConnectionTo = (remoteId) => {
+    var myId = this.props.id;
+    var connection = this.connections[myId] = new WebRTCConnection({
+      self: myId,
+      remote: remoteId,
+    });
+    connection.setSendFn(m => this.medium.send(myId, remoteId, m))
+    connection.setLogFn(m => this.log(`<connection ${remoteId}>${m}`))
+    this.onMessageReceive((from, m) => {
+      if (from === remoteId)
+        connection.receive(m);
+    })
+    connection.onStatusChange(s => { this.log(`<connection ${remoteId}>${s}`) })
+    connection.connect();
+    return connection;
   }
 }
 
@@ -86,7 +110,6 @@ class App extends React.Component {
           <Client
             id={c}
             key={c}
-            ref={c => this.client1 = c}
             clients={this.clients}
             medium={this.medium} />
         ))}
