@@ -14,7 +14,7 @@ class WebRTCConnection {
   }
 
   receive(m) {
-
+    this.log('Received - ' + m)
   }
 
   connect() {

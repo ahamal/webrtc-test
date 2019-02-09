@@ -31,7 +31,7 @@ class Client extends React.Component {
   constructor(props) {
     super(props);
     this.logs = [];
-    this.connections = [];
+    this.connections = {};
     this.medium = props.medium;
 
     this.messageReceiveListeners = new Set();
@@ -63,34 +63,46 @@ class Client extends React.Component {
     this.forceUpdate();
   }
 
-  connectTo = (c) => {
-    this.log('Connecting');
-    this.createNewConnectionTo(c)
+  connectTo = (remoteId) => {
+    if (this.connections[remoteId]) {
+      this.log('Connection already exists');
+      return;
+    }    
+    this.log('Connecting to ' + remoteId);
+
+    var connection = this.createNewConnectionTo(remoteId);
+    connection.connect();
   }
 
-  receive = (from, message) => {
-    this.messageReceiveListeners.forEach(l => l(from, message));
-    this.log(`From [${from}]: ${message}`);
+  receive = (remoteId, message) => {
+    console.log(this.connections, remoteId)
+    if (!this.connections[remoteId]) {
+      this.log('📞  Incoming connection request from ' + remoteId)
+      this.createNewConnectionTo(remoteId);
+    }
+
+    this.messageReceiveListeners.forEach(fn => fn(remoteId, message));
   }
 
   onMessageReceive = (fn) => {
     this.messageReceiveListeners.add(fn);
   }
 
+
   createNewConnectionTo = (remoteId) => {
     var myId = this.props.id;
-    var connection = this.connections[myId] = new WebRTCConnection({
+    var connection = this.connections[remoteId] = new WebRTCConnection({
       self: myId,
       remote: remoteId,
     });
-    connection.setSendFn(m => this.medium.send(myId, remoteId, m))
-    connection.setLogFn(m => this.log(`<connection ${remoteId}>${m}`))
+    connection.setSendFn(m => this.medium.send(myId, remoteId, m));
+    connection.setLogFn(m => this.log(`<connection ${remoteId}> ${m}`));
     this.onMessageReceive((from, m) => {
-      if (from === remoteId)
-        connection.receive(m);
-    })
-    connection.onStatusChange(s => { this.log(`<connection ${remoteId}>${s}`) })
-    connection.connect();
+      if (from === remoteId) connection.receive(m);
+    });
+    connection.onStatusChange(s => { this.log(`<connection ${remoteId}> ${s}`) });
+
+    this.log(`<connection ${remoteId}> created.`)
     return connection;
   }
 }
